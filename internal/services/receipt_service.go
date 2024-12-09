@@ -1,13 +1,19 @@
-package service
+package services
 
 import (
+	"errors"
 	"fmt"
+	"log"
 	"regexp"
 	"strconv"
 	"strings"
 
-	"github.com/javier-tello/receipt-processor-challenge/models"
+	"github.com/javier-tello/receipt-processor-challenge/internal/models"
 )
+
+func NewReceiptService(receiptRepo models.ReceiptRepository) *ReceiptService {
+	return &ReceiptService{ReceiptRepo: receiptRepo}
+}
 
 func calculatePointsForRetailerName(receipt models.Receipt) int {
 	retailer := receipt.Retailer
@@ -80,4 +86,33 @@ func calculatePointsForTimeOfPurchase(receipt models.Receipt) int {
 
 	return points
 
+}
+
+type ReceiptService struct {
+	ReceiptRepo models.ReceiptRepository
+}
+
+func NewUserService(receiptRepo models.ReceiptRepository) *ReceiptService {
+	return &ReceiptService{ReceiptRepo: receiptRepo}
+}
+
+func (rs *ReceiptService) GetReceiptByID(id int) (map[string]string, error) {
+	receipt, err := rs.ReceiptRepo.FindByID(id)
+	if err != nil {
+		return nil, err
+	}
+	if receipt == nil {
+		log.Printf("receipt not found")
+		return nil, errors.New("receipt not found")
+	}
+	points := calculatePointsForDayOfPurchase(*receipt) + calculatePointsForItemDescription(*receipt) + calculatePointsForItemPairs(*receipt) + calculatePointsForRetailerName(*receipt) + calculatePointsForTimeOfPurchase(*receipt) + calculatePointsForTotalDecimals(*receipt)
+	data := map[string]string{
+		"points": strconv.Itoa(points),
+	}
+
+	return data, nil
+}
+
+func (rs *ReceiptService) CreateReceipt(receipt models.Receipt) error {
+	return rs.ReceiptRepo.Save(&receipt)
 }
