@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"strconv"
 
@@ -33,10 +32,6 @@ func (h *ReceiptHandler) CreateReceipt(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	log.Printf("*********************")
-	log.Println(receipt)
-	log.Printf("*********************")
 
 	receiptID, err := h.ReceiptService.ProcessReceipt(receipt)
 

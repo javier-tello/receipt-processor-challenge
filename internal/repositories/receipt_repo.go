@@ -12,7 +12,7 @@ type ReceiptRepository interface {
 	FindByID(id int) (models.Receipt, bool)
 }
 
-// In memeory implemetaion for challenge
+// In memeory implemetaion for this challenge
 type InMemoryReceiptRepo struct {
 	receipts  map[int]models.Receipt
 	idCounter int
