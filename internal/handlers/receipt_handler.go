@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -14,7 +15,7 @@ import (
 
 type ReceiptHandler struct {
 	ReceiptService *services.ReceiptService
-	Validator      *validation.ReceiptValidator
+	Validator      validation.ReceiptValidator
 }
 
 func NewReceiptHandler(receiptService *services.ReceiptService) *ReceiptHandler {
@@ -33,15 +34,25 @@ func (h *ReceiptHandler) CreateReceipt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.ReceiptService.CreateReceipt(receipt); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	log.Printf("*********************")
+	log.Println(receipt)
+	log.Printf("*********************")
+
+	receiptID, err := h.ReceiptService.ProcessReceipt(receipt)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
+	response := map[string]string{
+		"id": strconv.Itoa(receiptID),
+	}
+
 	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(response)
 }
 
-// GetUserByID handles GET /users/{id}.
 func (h *ReceiptHandler) GetReceiptByID(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	receiptID := vars["id"]
@@ -51,20 +62,12 @@ func (h *ReceiptHandler) GetReceiptByID(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Use the service to fetch the user
 	response, err := h.ReceiptService.GetReceiptByID(convertedReceiptId)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
-	jsonResponseData, err := json.Marshal(response)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Respond with the user data as JSON
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(jsonResponseData)
+	json.NewEncoder(w).Encode(response)
 }

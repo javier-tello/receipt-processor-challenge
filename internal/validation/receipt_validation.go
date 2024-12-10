@@ -48,10 +48,10 @@ func (uv *ReceiptValidator) Validate(receipt models.Receipt) error {
 			return errors.New("short description is required and missing in index " + strconv.Itoa(i) + " of items")
 		}
 
-		if isValidAmount(receipt.Items[i].Price) {
+		if !isValidAmount(receipt.Items[i].Price) {
 			return errors.New("invalid total in index " + strconv.Itoa(i) + " of items, must be in ##.## format")
 		}
-		if isValidShortDescription(receipt.Items[i].ShortDescription) {
+		if !isValidShortDescription(receipt.Items[i].ShortDescription) {
 			return errors.New("invalid short description in index " + strconv.Itoa(i) + " of items, must be alphanumeric characters with - being the only allowed special character")
 		}
 	}
@@ -60,7 +60,7 @@ func (uv *ReceiptValidator) Validate(receipt models.Receipt) error {
 }
 
 func isValidRetailerName(retailer string) bool {
-	retailerRegex := `"^[\\w\\s\\-&]+$"`
+	retailerRegex := `^[\w\s\-&]+$`
 	re := regexp.MustCompile((retailerRegex))
 
 	return re.MatchString(retailer)
@@ -81,14 +81,14 @@ func isValidPurchaseTime(purchaseTime string) bool {
 }
 
 func isValidAmount(amount string) bool {
-	amountRegx := `"^\\d+\\.\\d{2}$`
+	amountRegx := `^\d+\.\d{2}$`
 	re := regexp.MustCompile(amountRegx)
 
 	return re.MatchString(amount)
 }
 
 func isValidShortDescription(shortDescription string) bool {
-	itemShortDescriptionRegex := `^[\\w\\s\\-]+$`
+	itemShortDescriptionRegex := `^[\w\s\-]+$`
 	re := regexp.MustCompile(itemShortDescriptionRegex)
 
 	return re.MatchString(shortDescription)

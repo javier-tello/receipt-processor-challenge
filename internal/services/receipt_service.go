@@ -9,10 +9,34 @@ import (
 	"strings"
 
 	"github.com/javier-tello/receipt-processor-challenge/internal/models"
+	"github.com/javier-tello/receipt-processor-challenge/internal/repositories"
 )
 
-func NewReceiptService(receiptRepo models.ReceiptRepository) *ReceiptService {
-	return &ReceiptService{ReceiptRepo: receiptRepo}
+type ReceiptService struct {
+	repo repositories.ReceiptRepository
+}
+
+func NewReceiptService(repo repositories.ReceiptRepository) *ReceiptService {
+	return &ReceiptService{repo: repo}
+}
+
+func (rs *ReceiptService) ProcessReceipt(receipt models.Receipt) (int, error) {
+	return rs.repo.ProcessReceipt(receipt), nil
+}
+
+func (rs *ReceiptService) GetReceiptByID(id int) (map[string]string, error) {
+	receipt, exists := rs.repo.FindByID(id)
+
+	if !exists {
+		log.Printf("receipt not found")
+		return nil, errors.New("receipt not found")
+	}
+	points := calculatePointsForDayOfPurchase(receipt) + calculatePointsForItemDescription(receipt) + calculatePointsForItemPairs(receipt) + calculatePointsForRetailerName(receipt) + calculatePointsForTimeOfPurchase(receipt) + calculatePointsForTotalDecimals(receipt)
+	data := map[string]string{
+		"points": strconv.Itoa(points),
+	}
+
+	return data, nil
 }
 
 func calculatePointsForRetailerName(receipt models.Receipt) int {
@@ -86,33 +110,4 @@ func calculatePointsForTimeOfPurchase(receipt models.Receipt) int {
 
 	return points
 
-}
-
-type ReceiptService struct {
-	ReceiptRepo models.ReceiptRepository
-}
-
-func NewUserService(receiptRepo models.ReceiptRepository) *ReceiptService {
-	return &ReceiptService{ReceiptRepo: receiptRepo}
-}
-
-func (rs *ReceiptService) GetReceiptByID(id int) (map[string]string, error) {
-	receipt, err := rs.ReceiptRepo.FindByID(id)
-	if err != nil {
-		return nil, err
-	}
-	if receipt == nil {
-		log.Printf("receipt not found")
-		return nil, errors.New("receipt not found")
-	}
-	points := calculatePointsForDayOfPurchase(*receipt) + calculatePointsForItemDescription(*receipt) + calculatePointsForItemPairs(*receipt) + calculatePointsForRetailerName(*receipt) + calculatePointsForTimeOfPurchase(*receipt) + calculatePointsForTotalDecimals(*receipt)
-	data := map[string]string{
-		"points": strconv.Itoa(points),
-	}
-
-	return data, nil
-}
-
-func (rs *ReceiptService) CreateReceipt(receipt models.Receipt) error {
-	return rs.ReceiptRepo.Save(&receipt)
 }
