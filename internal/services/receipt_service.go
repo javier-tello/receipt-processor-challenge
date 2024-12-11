@@ -1,7 +1,6 @@
 package services
 
 import (
-	"fmt"
 	"log"
 	"math"
 	"regexp"
@@ -92,7 +91,7 @@ func calculatePointsForDayOfPurchase(purchaseDate string) int {
 
 	convertedDayInt, err := strconv.Atoi(dayOfPurchase)
 	if err != nil {
-		fmt.Println("Error:", err)
+		log.Println("Error:", err)
 	} else {
 		if convertedDayInt%2 == 1 {
 			points += 6

@@ -18,7 +18,7 @@ func main() {
 
 	router := mux.NewRouter()
 	router.HandleFunc("/receipts/process", receiptHandler.ProcessReceipt).Methods("POST")
-	router.HandleFunc("/receipts/{id}/points", receiptHandler.GetReceiptByID).Methods("GET")
+	router.HandleFunc("/receipts/{id}/points", receiptHandler.GetPointsForReceipt).Methods("GET")
 
 	port := ":3000"
 	log.Printf("Starting receipt-processor-challenge simple web server on : %s\n", port)
