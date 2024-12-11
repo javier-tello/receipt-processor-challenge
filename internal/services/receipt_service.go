@@ -1,7 +1,6 @@
 package services
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -25,50 +24,44 @@ func (rs *ReceiptService) ProcessReceipt(receipt models.Receipt) (int, error) {
 	return rs.repo.ProcessReceipt(receipt), nil
 }
 
-func (rs *ReceiptService) GetReceiptByID(id int) (map[string]string, error) {
-	receipt, exists := rs.repo.FindByID(id)
-
+func (rs *ReceiptService) CalculateTotalPointsForReceipt(receiptID int) (int, error) {
+	log.Println("Retreiving receipt")
+	receipt, exists := rs.repo.FindByID(receiptID)
 	if !exists {
-		log.Printf("receipt not found")
-		return nil, errors.New("receipt not found")
+		log.Println("receipt not found")
 	}
+	log.Println("Receipt successfully retreived")
 
-	points := calculatePointsForDayOfPurchase(receipt) + calculatePointsForItemDescription(receipt) + calculatePointsForItemPairs(receipt) + calculatePointsForRetailerName(receipt) + calculatePointsForTimeOfPurchase(receipt) + calculatePointsForTotalDecimals(receipt)
-	data := map[string]string{
-		"points": strconv.Itoa(points),
-	}
+	log.Println("Calculating points for receipt")
+	points := calculatePointsForDayOfPurchase(receipt.PurchaseDate) + calculatePointsForItemDescription(receipt.Items) + calculatePointsForItemPairs(receipt.Items) + calculatePointsForRetailerName(receipt.Retailer) + calculatePointsForTimeOfPurchase(receipt.PurchaseTime) + calculatePointsForTotalDecimals(receipt.Total)
 
-	return data, nil
+	return points, nil
 }
 
-func calculatePointsForRetailerName(receipt models.Receipt) int {
-	retailer := receipt.Retailer
+func calculatePointsForRetailerName(retailerName string) int {
 	re := regexp.MustCompile(`[^a-zA-Z0-9]+`)
-	trimmed_retailer := re.ReplaceAllString(retailer, "")
+	trimmed_retailer := re.ReplaceAllString(retailerName, "")
 
 	log.Println(len(trimmed_retailer), " points - retailer name (", trimmed_retailer, ") has ", len(trimmed_retailer), " alphanumeric")
 
 	return len(trimmed_retailer)
 }
 
-func calculatePointsForItemPairs(receipt models.Receipt) int {
-	receiptItems := receipt.Items
+func calculatePointsForItemPairs(items []models.Item) int {
+	log.Println(5*(len(items)/2), " points - ", len(items), " items (2 pairs @ 5 points each)")
 
-	log.Println(5*(len(receiptItems)/2), " points - ", len(receiptItems), " items (2 pairs @ 5 points each)")
-
-	return (5 * (len(receiptItems) / 2))
+	return (5 * (len(items) / 2))
 }
 
-func calculatePointsForItemDescription(receipt models.Receipt) int {
-	receiptItems := receipt.Items
+func calculatePointsForItemDescription(items []models.Item) int {
 	points := 0
 
-	for _, value := range receiptItems {
+	for _, value := range items {
 		trimmedDescription := strings.TrimSpace(value.ShortDescription)
 		if len(trimmedDescription)%3 == 0 {
 			price, err := strconv.ParseFloat(value.Price, 64)
 			if err != nil {
-				log.Printf("Error in converting string to int")
+				log.Println("Error in converting string to int")
 			}
 			points += int(math.Ceil(price * 0.2))
 			log.Println(int(math.Ceil(price*0.2)), " Points - \"", trimmedDescription, "\" is ", len(trimmedDescription), " characters (a multiple of 3) item price of ", value.Price, " * 0.2 = ", price*0.2, ", rounded up is ", int(math.Ceil(price*0.2)), " points")
@@ -78,10 +71,8 @@ func calculatePointsForItemDescription(receipt models.Receipt) int {
 	return points
 }
 
-func calculatePointsForTotalDecimals(receipt models.Receipt) int {
-	purhcaseTotal := receipt.Total
+func calculatePointsForTotalDecimals(purhcaseTotal string) int {
 	points := 0
-
 	indexOfDecimalPoint := strings.IndexRune(purhcaseTotal, '.')
 	if purhcaseTotal[indexOfDecimalPoint:] == ".00" || purhcaseTotal[indexOfDecimalPoint:] == ".25" || purhcaseTotal[indexOfDecimalPoint:] == ".75" {
 		if purhcaseTotal[indexOfDecimalPoint:] == ".00" {
@@ -95,8 +86,7 @@ func calculatePointsForTotalDecimals(receipt models.Receipt) int {
 	return points
 }
 
-func calculatePointsForDayOfPurchase(receipt models.Receipt) int {
-	purchaseDate := receipt.PurchaseDate
+func calculatePointsForDayOfPurchase(purchaseDate string) int {
 	dayOfPurchase := purchaseDate[8:]
 	points := 0
 
@@ -113,8 +103,7 @@ func calculatePointsForDayOfPurchase(receipt models.Receipt) int {
 	return points
 }
 
-func calculatePointsForTimeOfPurchase(receipt models.Receipt) int {
-	purchaseTime := receipt.PurchaseTime
+func calculatePointsForTimeOfPurchase(purchaseTime string) int {
 	points := 0
 
 	if purchaseTime > "14:00" && purchaseTime < "18:00" {

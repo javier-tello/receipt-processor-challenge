@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -21,7 +22,7 @@ func NewReceiptHandler(receiptService *services.ReceiptService) *ReceiptHandler 
 	return &ReceiptHandler{ReceiptService: receiptService}
 }
 
-func (h *ReceiptHandler) CreateReceipt(w http.ResponseWriter, r *http.Request) {
+func (h *ReceiptHandler) ProcessReceipt(w http.ResponseWriter, r *http.Request) {
 	var receipt models.Receipt
 	if err := json.NewDecoder(r.Body).Decode(&receipt); err != nil {
 		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
@@ -33,12 +34,15 @@ func (h *ReceiptHandler) CreateReceipt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Println("Processing reciept")
 	receiptID, err := h.ReceiptService.ProcessReceipt(receipt)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
+		log.Println("Something went wrong with processing receipt")
 		return
 	}
+	log.Println("Receipt succesfully processed")
 
 	response := map[string]string{
 		"id": strconv.Itoa(receiptID),
@@ -48,19 +52,26 @@ func (h *ReceiptHandler) CreateReceipt(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-func (h *ReceiptHandler) GetReceiptByID(w http.ResponseWriter, r *http.Request) {
+func (h *ReceiptHandler) GetPointsForReceipt(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	receiptID := vars["id"]
 	convertedReceiptId, err := strconv.Atoi(receiptID)
+
 	if err != nil || convertedReceiptId < 0 {
 		http.Error(w, "Invalid receipt ID", http.StatusBadRequest)
 		return
 	}
 
-	response, err := h.ReceiptService.GetReceiptByID(convertedReceiptId)
+	pointsForReceipt, err := h.ReceiptService.CalculateTotalPointsForReceipt(convertedReceiptId)
+
 	if err != nil {
+		log.Println("Receipt not found")
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
+	}
+
+	response := map[string]string{
+		"points": strconv.Itoa(pointsForReceipt),
 	}
 
 	w.Header().Set("Content-Type", "application/json")

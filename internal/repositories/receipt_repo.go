@@ -26,7 +26,6 @@ func NewInMemoryReceiptRepo() *InMemoryReceiptRepo {
 	}
 }
 
-// GET and POST calls
 func (repo *InMemoryReceiptRepo) FindByID(id int) (models.Receipt, bool) {
 	repo.mu.Lock()
 	defer repo.mu.Unlock()

@@ -17,7 +17,7 @@ func main() {
 	receiptHandler := handlers.NewReceiptHandler(receiptService)
 
 	router := mux.NewRouter()
-	router.HandleFunc("/receipts/process", receiptHandler.CreateReceipt).Methods("POST")
+	router.HandleFunc("/receipts/process", receiptHandler.ProcessReceipt).Methods("POST")
 	router.HandleFunc("/receipts/{id}/points", receiptHandler.GetReceiptByID).Methods("GET")
 
 	port := ":3000"
