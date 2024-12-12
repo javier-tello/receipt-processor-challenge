@@ -29,7 +29,7 @@ func (h *ReceiptHandler) ProcessReceipt(w http.ResponseWriter, r *http.Request) 
 	var receipt models.Receipt
 	if err := json.NewDecoder(r.Body).Decode(&receipt); err != nil {
 		log.Printf("Failed to decode receipt JSON: %v", err)
-		http.Error(w, "Invalid input. Please check the JSON format.", http.StatusBadRequest)
+		http.Error(w, "The receipt is invalid.", http.StatusBadRequest)
 		return
 	}
 
@@ -39,13 +39,8 @@ func (h *ReceiptHandler) ProcessReceipt(w http.ResponseWriter, r *http.Request) 
 	}
 
 	log.Println("Processing receipt")
-	receiptID, err := h.ReceiptService.ProcessReceipt(receipt)
+	receiptID := h.ReceiptService.ProcessReceipt(receipt)
 
-	if err != nil {
-		log.Printf("Error processing receipt: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
 	log.Printf("Receipt ID: %s successfully processed", receiptID)
 	jsonResponse(w, http.StatusCreated, map[string]string{"id": receiptID})
 }
@@ -64,7 +59,7 @@ func (h *ReceiptHandler) GetPointsForReceipt(w http.ResponseWriter, r *http.Requ
 
 	if err != nil {
 		log.Printf("Receipt ID %s not found: %v", receiptID, err)
-		http.Error(w, "Receipt not found", http.StatusNotFound)
+		http.Error(w, "No receipt found for that ID", http.StatusNotFound)
 		return
 	}
 

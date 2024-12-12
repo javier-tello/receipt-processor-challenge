@@ -34,51 +34,51 @@ func (uv *ReceiptValidator) ValidateReceipt(receipt models.Receipt) error {
 	var validationErrors []string
 
 	if receipt.Retailer == "" {
-		validationErrors = append(validationErrors, "retailer is required")
+		validationErrors = append(validationErrors, "The receipt is invalid, retailer is required.")
 	}
 	if receipt.PurchaseDate == "" {
-		validationErrors = append(validationErrors, "purchase date is required")
+		validationErrors = append(validationErrors, "The receipt is invalid, purchase date is required.")
 	}
 	if receipt.PurchaseTime == "" {
-		validationErrors = append(validationErrors, "purchase time is required")
+		validationErrors = append(validationErrors, "The receipt is invalid, purchase time is required.")
 	}
 	if receipt.Total == "" {
-		validationErrors = append(validationErrors, "total is required")
+		validationErrors = append(validationErrors, "The receipt is invalid, total is required.")
 	}
 	if len(receipt.Items) == 0 {
-		validationErrors = append(validationErrors, "item(s) are required")
+		validationErrors = append(validationErrors, "The receipt is invalid, item(s) are required.")
 	}
 
-	if !retailerRegex.MatchString(receipt.Retailer) {
-		validationErrors = append(validationErrors, "invalid retailer name")
+	if receipt.Retailer != "" && !retailerRegex.MatchString(receipt.Retailer) {
+		validationErrors = append(validationErrors, "The receipt is invalid, bad retailer name.")
 	}
-	if !IsValidPurchaseDate(receipt.PurchaseDate) {
-		validationErrors = append(validationErrors, "invalid purchase date, must be in YYYY-MM-DD format")
+	if receipt.PurchaseDate != "" && !IsValidPurchaseDate(receipt.PurchaseDate) {
+		validationErrors = append(validationErrors, "The receipt is invalid, bad purchase date. Must be in YYYY-MM-DD format.")
 	}
-	if !purchaseTimeRegex.MatchString(receipt.PurchaseTime) {
-		validationErrors = append(validationErrors, "invalid purchase time, must be in HH:MM format")
+	if receipt.PurchaseTime != "" && !purchaseTimeRegex.MatchString(receipt.PurchaseTime) {
+		validationErrors = append(validationErrors, "The receipt is invalid, bad purchase time. Must be in HH:MM format")
 	}
-	if !amountRegex.MatchString(receipt.Total) {
-		validationErrors = append(validationErrors, "invalid total, must be in ##.## format")
+	if receipt.Total != "" && !amountRegex.MatchString(receipt.Total) {
+		validationErrors = append(validationErrors, "The receipt is invalid, bad total. Must be in ##.## format.")
 	}
 
 	for i, item := range receipt.Items {
 		if item.Price == "" {
-			validationErrors = append(validationErrors, fmt.Sprintf("missing price in item at index %d", i))
+			validationErrors = append(validationErrors, fmt.Sprintf("The receipt is invalid, missing price in item at index %d.", i))
 		}
 		if item.ShortDescription == "" {
-			validationErrors = append(validationErrors, fmt.Sprintf("missing short description in item at index %d", i))
+			validationErrors = append(validationErrors, fmt.Sprintf("The receipt is invalid, missing short description in item at index %d.", i))
 		}
-		if !amountRegex.MatchString(item.Price) {
-			validationErrors = append(validationErrors, fmt.Sprintf("invalid price in item at index %d", i))
+		if item.Price != "" && !amountRegex.MatchString(item.Price) {
+			validationErrors = append(validationErrors, fmt.Sprintf("The receipt is invalid, bad price in item at index %d.", i))
 		}
-		if !itemShortDescriptionRegex.MatchString(item.ShortDescription) {
-			validationErrors = append(validationErrors, fmt.Sprintf("invalid short description in item at index %d", i))
+		if item.ShortDescription != "" && !itemShortDescriptionRegex.MatchString(item.ShortDescription) {
+			validationErrors = append(validationErrors, fmt.Sprintf("The receipt is invalid, bad short description in item at index %d.", i))
 		}
 	}
 
 	if len(validationErrors) > 0 {
-		return errors.New(strings.Join(validationErrors, "; "))
+		return errors.New(strings.Join(validationErrors, " | "))
 	}
 	return nil
 }

@@ -28,8 +28,8 @@ func NewReceiptService(repo repositories.ReceiptRepository) *ReceiptService {
 	return &ReceiptService{repo: repo}
 }
 
-func (rs *ReceiptService) ProcessReceipt(receipt models.Receipt) (string, error) {
-	return rs.repo.ProcessReceipt(receipt), nil
+func (rs *ReceiptService) ProcessReceipt(receipt models.Receipt) string {
+	return rs.repo.ProcessReceipt(receipt)
 }
 
 func (rs *ReceiptService) CalculateTotalPointsForReceipt(receiptID string) (int, error) {
