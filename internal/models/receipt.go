@@ -2,7 +2,7 @@ package models
 
 // Contents of a receipt
 type Receipt struct {
-	ID           int
+	ID           string
 	Retailer     string `json:"retailer"`
 	PurchaseDate string `json:"purchaseDate"`
 	PurchaseTime string `json:"purchaseTime"`

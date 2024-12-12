@@ -3,340 +3,169 @@ package services
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/javier-tello/receipt-processor-challenge/internal/models"
 )
 
+type MockUUIDGenerator struct{}
+
+func (m MockUUIDGenerator) New() uuid.UUID {
+	return uuid.MustParse("123e4567-e89b-12d3-a456-426614174000") // Fixed UUID for deterministic tests
+}
+
 type MockReceiptRepository struct {
-	receipts  map[int]models.Receipt
-	idCounter int
+	receipts    map[string]models.Receipt
+	idGenerator MockUUIDGenerator
 }
 
-func NewMockReceiptRepository() *MockReceiptRepository {
-	return &MockReceiptRepository{receipts: make(map[int]models.Receipt), idCounter: 0}
+func NewMockReceiptRepository(generator MockUUIDGenerator) *MockReceiptRepository {
+	return &MockReceiptRepository{receipts: make(map[string]models.Receipt), idGenerator: generator}
 }
 
-func (m *MockReceiptRepository) ProcessReceipt(receipt models.Receipt) int {
-	receipt.ID = m.idCounter
-	m.idCounter++
-	m.receipts[receipt.ID] = receipt
-
-	return receipt.ID
+func (m *MockReceiptRepository) ProcessReceipt(receipt models.Receipt) string {
+	receiptID := m.idGenerator.New().String()
+	m.receipts[receiptID] = receipt
+	return receiptID
 }
 
-func (m *MockReceiptRepository) FindByID(receiptID int) (models.Receipt, bool) {
+func (m *MockReceiptRepository) FindByID(receiptID string) (models.Receipt, bool) {
 	receipt, exists := m.receipts[receiptID]
-
 	return receipt, exists
 }
 
-func TestReceiptService_CalculateTotalPointsForReceipt(t *testing.T) {
-	repo := NewMockReceiptRepository()
+func TestReceiptService_PointCalculations(t *testing.T) {
+	mockUUIDGenerator := MockUUIDGenerator{}
+	repo := NewMockReceiptRepository(mockUUIDGenerator)
 	service := NewReceiptService(repo)
 
-	receipt, err := service.ProcessReceipt(models.Receipt{
-		Retailer:     "Target",
-		PurchaseDate: "2022-01-02",
-		PurchaseTime: "13:13",
-		Total:        "1.25",
-		Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: "1.25"}}})
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
+	tests := []struct {
+		name                string
+		receipt             models.Receipt
+		expectedTotalPoints int
+	}{
+		{
+			name: "No Points",
+			receipt: models.Receipt{
+				Retailer:     "",
+				PurchaseDate: "2022-01-02",
+				PurchaseTime: "13:13",
+				Total:        "1.01",
+				Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: "1.25"}},
+			},
+			expectedTotalPoints: 0,
+		},
+		{
+			name: "Valid Total Ending in 0",
+			receipt: models.Receipt{
+				Retailer:     "",
+				PurchaseDate: "2022-01-02",
+				PurchaseTime: "13:13",
+				Total:        "1.00",
+				Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: "1.25"}},
+			},
+			expectedTotalPoints: 75,
+		},
+		{
+			name: "Retailer Name",
+			receipt: models.Receipt{
+				Retailer:     "Target",
+				PurchaseDate: "2022-01-02",
+				PurchaseTime: "13:13",
+				Total:        "1.01",
+				Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: "1.25"}},
+			},
+			expectedTotalPoints: 6,
+		},
+		{
+			name: "Valid Total Ending in a multiple of 25",
+			receipt: models.Receipt{
+				Retailer:     "",
+				PurchaseDate: "2022-01-02",
+				PurchaseTime: "13:13",
+				Total:        "1.75",
+				Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: "1.25"}},
+			},
+			expectedTotalPoints: 25,
+		},
+		{
+			name: "Odd Day Purchase Date",
+			receipt: models.Receipt{
+				Retailer:     "",
+				PurchaseDate: "2022-01-01",
+				PurchaseTime: "13:13",
+				Total:        "1.26",
+				Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: "1.25"}},
+			},
+			expectedTotalPoints: 6,
+		},
+		{
+			name: "Valid Time for Bonus Points",
+			receipt: models.Receipt{
+				Retailer:     "",
+				PurchaseDate: "2022-01-02",
+				PurchaseTime: "14:30",
+				Total:        "1.25",
+				Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: "1.25"}},
+			},
+			expectedTotalPoints: 35,
+		},
+		{
+			name: "Valid Short Description Bonus",
+			receipt: models.Receipt{
+				Retailer:     "",
+				PurchaseDate: "2022-01-02",
+				PurchaseTime: "13:13",
+				Total:        "1.01",
+				Items:        []models.Item{{ShortDescription: "Emils Cheese Pizza", Price: "12.25"}},
+			},
+			expectedTotalPoints: 3,
+		},
+		{
+			name: "Multiple Item Pairs",
+			receipt: models.Receipt{
+				Retailer:     "",
+				PurchaseDate: "2022-01-02",
+				PurchaseTime: "13:13",
+				Total:        "1.01",
+				Items: []models.Item{
+					{ShortDescription: "Pepsi - 12-oz", Price: "1.25"},
+					{ShortDescription: "Pepsi - 12-oz", Price: "1.25"},
+					{ShortDescription: "Pepsi - 12-oz", Price: "1.25"},
+					{ShortDescription: "Pepsi - 12-oz", Price: "1.25"},
+				},
+			},
+			expectedTotalPoints: 10,
+		},
 	}
 
-	expectedTotalPoints := 31
-	calculatedTotalPoints, err := service.CalculateTotalPointsForReceipt(receipt)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			receiptID, err := service.ProcessReceipt(test.receipt)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
 
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
+			calculatedPoints, err := service.CalculateTotalPointsForReceipt(receiptID)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
 
-	if expectedTotalPoints != calculatedTotalPoints {
-		t.Errorf("Expected points to total: %+d, got: %+d", expectedTotalPoints, calculatedTotalPoints)
+			if test.expectedTotalPoints != calculatedPoints {
+				t.Errorf("Test case: %s - Expected points: %d, got: %d", test.name, test.expectedTotalPoints, calculatedPoints)
+			}
+		})
 	}
 }
 
-func TestReceiptService_CalculatePoitntsForRetailer(t *testing.T) {
-	repo := NewMockReceiptRepository()
+func TestReceiptService_MissingReceiptError(t *testing.T) {
+	mockUUIDGenerator := MockUUIDGenerator{}
+	repo := NewMockReceiptRepository(mockUUIDGenerator)
 	service := NewReceiptService(repo)
 
-	receipt, err := service.ProcessReceipt(models.Receipt{
-		Retailer:     "Target",
-		PurchaseDate: "2022-01-02",
-		PurchaseTime: "13:13",
-		Total:        "1.26",
-		Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: "1.25"}}})
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
+	receiptID := "non-existent-id"
 
-	expectedTotalPoints := 6
-	calculatedTotalPoints, err := service.CalculateTotalPointsForReceipt(receipt)
-
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	if expectedTotalPoints != calculatedTotalPoints {
-		t.Errorf("Expected points to total: %+d, got: %+d", expectedTotalPoints, calculatedTotalPoints)
-	}
-}
-
-func TestReceiptService_CalculatePointsForPurchaseDateOddDay(t *testing.T) {
-	repo := NewMockReceiptRepository()
-	service := NewReceiptService(repo)
-
-	receipt, err := service.ProcessReceipt(models.Receipt{
-		Retailer:     "",
-		PurchaseDate: "2022-01-01",
-		PurchaseTime: "13:13",
-		Total:        "1.26",
-		Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: "1.25"}}})
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	expectedTotalPoints := 6
-	calculatedTotalPoints, err := service.CalculateTotalPointsForReceipt(receipt)
-
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	if expectedTotalPoints != calculatedTotalPoints {
-		t.Errorf("Expected points to total: %+d, got: %+d", expectedTotalPoints, calculatedTotalPoints)
-	}
-}
-
-func TestReceiptService_CalculatePointsForPurchaseDateEvenDay(t *testing.T) {
-	repo := NewMockReceiptRepository()
-	service := NewReceiptService(repo)
-
-	receipt, err := service.ProcessReceipt(models.Receipt{
-		Retailer:     "",
-		PurchaseDate: "2022-01-02",
-		PurchaseTime: "13:13",
-		Total:        "1.26",
-		Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: "1.25"}}})
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	expectedTotalPoints := 0
-	calculatedTotalPoints, err := service.CalculateTotalPointsForReceipt(receipt)
-
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	if expectedTotalPoints != calculatedTotalPoints {
-		t.Errorf("Expected points to total: %+d, got: %+d", expectedTotalPoints, calculatedTotalPoints)
-	}
-}
-
-func TestReceiptService_CalculatePointsForPurchaseTimeNoPoints(t *testing.T) {
-	repo := NewMockReceiptRepository()
-	service := NewReceiptService(repo)
-
-	receipt, err := service.ProcessReceipt(models.Receipt{
-		Retailer:     "",
-		PurchaseDate: "2022-01-02",
-		PurchaseTime: "13:13",
-		Total:        "1.26",
-		Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: "1.25"}}})
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	expectedTotalPoints := 0
-	calculatedTotalPoints, err := service.CalculateTotalPointsForReceipt(receipt)
-
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	if expectedTotalPoints != calculatedTotalPoints {
-		t.Errorf("Expected points to total: %+d, got: %+d", expectedTotalPoints, calculatedTotalPoints)
-	}
-}
-
-func TestReceiptService_CalculatePointsForPurchaseTime(t *testing.T) {
-	repo := NewMockReceiptRepository()
-	service := NewReceiptService(repo)
-
-	receipt, err := service.ProcessReceipt(models.Receipt{
-		Retailer:     "",
-		PurchaseDate: "2022-01-02",
-		PurchaseTime: "14:13",
-		Total:        "1.26",
-		Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: "1.25"}}})
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	expectedTotalPoints := 10
-	calculatedTotalPoints, err := service.CalculateTotalPointsForReceipt(receipt)
-
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	if expectedTotalPoints != calculatedTotalPoints {
-		t.Errorf("Expected points to total: %+d, got: %+d", expectedTotalPoints, calculatedTotalPoints)
-	}
-}
-
-func TestReceiptService_CalculatePointsForTotalEndingIn25Multiple(t *testing.T) {
-	repo := NewMockReceiptRepository()
-	service := NewReceiptService(repo)
-
-	receipt, err := service.ProcessReceipt(models.Receipt{
-		Retailer:     "",
-		PurchaseDate: "2022-01-02",
-		PurchaseTime: "13:13",
-		Total:        "1.25",
-		Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: "1.25"}}})
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	expectedTotalPoints := 25
-	calculatedTotalPoints, err := service.CalculateTotalPointsForReceipt(receipt)
-
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	if expectedTotalPoints != calculatedTotalPoints {
-		t.Errorf("Expected points to total: %+d, got: %+d", expectedTotalPoints, calculatedTotalPoints)
-	}
-}
-
-func TestReceiptService_CalculatePointsForTotalEndingIn0(t *testing.T) {
-	repo := NewMockReceiptRepository()
-	service := NewReceiptService(repo)
-
-	receipt, err := service.ProcessReceipt(models.Receipt{
-		Retailer:     "",
-		PurchaseDate: "2022-01-02",
-		PurchaseTime: "13:13",
-		Total:        "1.00",
-		Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: "1.25"}}})
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	expectedTotalPoints := 75
-	calculatedTotalPoints, err := service.CalculateTotalPointsForReceipt(receipt)
-
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	if expectedTotalPoints != calculatedTotalPoints {
-		t.Errorf("Expected points to total: %+d, got: %+d", expectedTotalPoints, calculatedTotalPoints)
-	}
-}
-
-func TestReceiptService_CalculatePointsForItemPairsNoPoints(t *testing.T) {
-	repo := NewMockReceiptRepository()
-	service := NewReceiptService(repo)
-
-	receipt, err := service.ProcessReceipt(models.Receipt{
-		Retailer:     "",
-		PurchaseDate: "2022-01-02",
-		PurchaseTime: "13:13",
-		Total:        "1.01",
-		Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: "1.25"}}})
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	expectedTotalPoints := 0
-	calculatedTotalPoints, err := service.CalculateTotalPointsForReceipt(receipt)
-
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	if expectedTotalPoints != calculatedTotalPoints {
-		t.Errorf("Expected points to total: %+d, got: %+d", expectedTotalPoints, calculatedTotalPoints)
-	}
-}
-
-func TestReceiptService_CalculatePointsForItemPairs(t *testing.T) {
-	repo := NewMockReceiptRepository()
-	service := NewReceiptService(repo)
-
-	receipt, err := service.ProcessReceipt(models.Receipt{
-		Retailer:     "",
-		PurchaseDate: "2022-01-02",
-		PurchaseTime: "13:13",
-		Total:        "1.01",
-		Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: "1.25"}, {ShortDescription: "Pepsi - 12-oz", Price: "1.25"}, {ShortDescription: "Pepsi - 12-oz", Price: "1.25"}, {ShortDescription: "Pepsi - 12-oz", Price: "1.25"}}})
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	expectedTotalPoints := 10
-	calculatedTotalPoints, err := service.CalculateTotalPointsForReceipt(receipt)
-
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	if expectedTotalPoints != calculatedTotalPoints {
-		t.Errorf("Expected points to total: %+d, got: %+d", expectedTotalPoints, calculatedTotalPoints)
-	}
-}
-
-func TestReceiptService_CalculatePointsForShortDescriptionNoPoints(t *testing.T) {
-	repo := NewMockReceiptRepository()
-	service := NewReceiptService(repo)
-
-	receipt, err := service.ProcessReceipt(models.Receipt{
-		Retailer:     "",
-		PurchaseDate: "2022-01-02",
-		PurchaseTime: "13:13",
-		Total:        "1.01",
-		Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: "1.25"}}})
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	expectedTotalPoints := 0
-	calculatedTotalPoints, err := service.CalculateTotalPointsForReceipt(receipt)
-
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	if expectedTotalPoints != calculatedTotalPoints {
-		t.Errorf("Expected points to total: %+d, got: %+d", expectedTotalPoints, calculatedTotalPoints)
-	}
-}
-
-func TestReceiptService_CalculatePointsForShortDescription(t *testing.T) {
-	repo := NewMockReceiptRepository()
-	service := NewReceiptService(repo)
-
-	receipt, err := service.ProcessReceipt(models.Receipt{
-		Retailer:     "",
-		PurchaseDate: "2022-01-02",
-		PurchaseTime: "13:13",
-		Total:        "1.01",
-		Items:        []models.Item{{ShortDescription: "Emils Cheese Pizza", Price: "12.25"}}})
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	expectedTotalPoints := 3
-	calculatedTotalPoints, err := service.CalculateTotalPointsForReceipt(receipt)
-
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	if expectedTotalPoints != calculatedTotalPoints {
-		t.Errorf("Expected points to total: %+d, got: %+d", expectedTotalPoints, calculatedTotalPoints)
+	_, err := service.CalculateTotalPointsForReceipt(receiptID)
+	if err == nil {
+		t.Fatalf("Expected error for missing receipt, got nil")
 	}
 }

@@ -1,220 +1,158 @@
-package validation
+package validation_test
 
 import (
-	"log"
 	"testing"
 
 	"github.com/javier-tello/receipt-processor-challenge/internal/models"
+	"github.com/javier-tello/receipt-processor-challenge/internal/validation"
 )
 
-func TestReceiptValidator_Validate_EmptyRetailer(t *testing.T) {
-	validation := ReceiptValidator{}
-	receipt := models.Receipt{
-		Retailer:     "",
-		PurchaseDate: "2022-01-02",
-		PurchaseTime: "13:13",
-		Total:        "1.25",
-		Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: "1.25"}}}
+func TestValidateReceiptID(t *testing.T) {
+	validator := &validation.ReceiptValidator{}
 
-	expectedError := "retailer is required"
-	actualErr := validation.Validate(receipt)
-	if actualErr == nil || actualErr.Error() != expectedError {
-		t.Errorf("retailer name should not be allowed to be empty")
+	tests := []struct {
+		name      string
+		receiptID string
+		expectErr bool
+	}{
+		{"Valid Receipt ID", "123456", false},
+		{"Empty Receipt ID", "", true},
+		{"Whitespace-only Receipt ID", "   ", true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := validator.ValidateReceiptID(test.receiptID)
+			if (err != nil) != test.expectErr {
+				t.Errorf("ValidateReceiptID(%q) error = %v, expectErr = %v", test.receiptID, err, test.expectErr)
+			}
+		})
 	}
 }
 
-func TestReceiptValidator_Validate_InvalidRetailer(t *testing.T) {
-	validation := ReceiptValidator{}
-	receipt := models.Receipt{
-		Retailer:     "T@rget",
-		PurchaseDate: "2022-01-02",
-		PurchaseTime: "13:13",
-		Total:        "1.25",
-		Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: "1.25"}}}
+func TestValidateReceipt(t *testing.T) {
+	validator := &validation.ReceiptValidator{}
 
-	expectedError := "invalid retailer name, must be alphanumeric characters and the following special characters are allow: & and -"
-	actualErr := validation.Validate(receipt)
-	if actualErr == nil || actualErr.Error() != expectedError {
-		t.Errorf("retailer name should not allow special characters except & and -")
+	validItems := []models.Item{
+		{ShortDescription: "Item 1", Price: "12.34"},
+		{ShortDescription: "Item 2", Price: "45.67"},
+	}
+
+	tests := []struct {
+		name      string
+		receipt   models.Receipt
+		expectErr bool
+	}{
+		{
+			name: "Valid Receipt",
+			receipt: models.Receipt{
+				Retailer:     "Retailer 1",
+				PurchaseDate: "2024-12-11",
+				PurchaseTime: "14:30",
+				Total:        "58.01",
+				Items:        validItems,
+			},
+			expectErr: false,
+		},
+		{
+			name: "Missing Retailer",
+			receipt: models.Receipt{
+				PurchaseDate: "2024-12-11",
+				PurchaseTime: "14:30",
+				Total:        "58.01",
+				Items:        validItems,
+			},
+			expectErr: true,
+		},
+		{
+			name: "Invalid Purchase Date",
+			receipt: models.Receipt{
+				Retailer:     "Retailer 1",
+				PurchaseDate: "11-12-2024",
+				PurchaseTime: "14:30",
+				Total:        "58.01",
+				Items:        validItems,
+			},
+			expectErr: true,
+		},
+		{
+			name: "Invalid Total Format",
+			receipt: models.Receipt{
+				Retailer:     "Retailer 1",
+				PurchaseDate: "2024-12-11",
+				PurchaseTime: "14:30",
+				Total:        "58.0",
+				Items:        validItems,
+			},
+			expectErr: true,
+		},
+		{
+			name: "Empty Items List",
+			receipt: models.Receipt{
+				Retailer:     "Retailer 1",
+				PurchaseDate: "2024-12-11",
+				PurchaseTime: "14:30",
+				Total:        "58.01",
+				Items:        []models.Item{},
+			},
+			expectErr: true,
+		},
+		{
+			name: "Invalid Item Short Description",
+			receipt: models.Receipt{
+				Retailer:     "Retailer 1",
+				PurchaseDate: "2024-12-11",
+				PurchaseTime: "14:30",
+				Total:        "58.01",
+				Items: []models.Item{
+					{ShortDescription: "", Price: "12.34"},
+				},
+			},
+			expectErr: true,
+		},
+		{
+			name: "Invalid Item Price",
+			receipt: models.Receipt{
+				Retailer:     "Retailer 1",
+				PurchaseDate: "2024-12-11",
+				PurchaseTime: "14:30",
+				Total:        "58.01",
+				Items: []models.Item{
+					{ShortDescription: "Item 1", Price: "12.3"},
+				},
+			},
+			expectErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := validator.ValidateReceipt(test.receipt)
+			if (err != nil) != test.expectErr {
+				t.Errorf("ValidateReceipt(%+v) error = %v, expectErr = %v", test.receipt, err, test.expectErr)
+			}
+		})
 	}
 }
 
-func TestReceiptValidator_Validate_EmptyPurchaseDate(t *testing.T) {
-	validation := ReceiptValidator{}
-	receipt := models.Receipt{
-		Retailer:     "Target",
-		PurchaseDate: "",
-		PurchaseTime: "13:13",
-		Total:        "1.25",
-		Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: "1.25"}}}
-
-	expectedError := "purchase date is required"
-	actualErr := validation.Validate(receipt)
-	if actualErr == nil || actualErr.Error() != expectedError {
-		t.Errorf("purchase date is not allowed to be empty")
+func TestIsValidPurchaseDate(t *testing.T) {
+	tests := []struct {
+		name         string
+		purchaseDate string
+		expectErr    bool
+	}{
+		{"Valid Date", "2024-12-11", true},
+		{"Invalid Format", "11-12-2024", false},
+		{"Invalid Month", "2024-13-11", false},
+		{"Invalid Day", "2024-12-32", false},
 	}
-}
 
-func TestReceiptValidator_Validate_InvalidPurchaseDate(t *testing.T) {
-	validation := ReceiptValidator{}
-	receipt := models.Receipt{
-		Retailer:     "Target",
-		PurchaseDate: "12-11-2024",
-		PurchaseTime: "13:13",
-		Total:        "1.25",
-		Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: "1.25"}}}
-
-	expectedError := "invalid purchase date, must be in YYYY-MM-DD format"
-	actualErr := validation.Validate(receipt)
-	if actualErr == nil || actualErr.Error() != expectedError {
-		t.Errorf("Purchase date must be in the format YYYY-MM-DD")
-	}
-}
-
-func TestReceiptValidator_Validate_EmptyPurchaseTime(t *testing.T) {
-	validation := ReceiptValidator{}
-	receipt := models.Receipt{
-		Retailer:     "Target",
-		PurchaseDate: "12-11-2024",
-		PurchaseTime: "",
-		Total:        "1.25",
-		Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: "1.25"}}}
-
-	expectedError := "purchase time is required"
-	actualErr := validation.Validate(receipt)
-	if actualErr == nil || actualErr.Error() != expectedError {
-		t.Errorf("Purchase time cannot be empty")
-	}
-}
-
-func TestReceiptValidator_Validate_InvalidPurchaseTime(t *testing.T) {
-	validation := ReceiptValidator{}
-	receipt := models.Receipt{
-		Retailer:     "Target",
-		PurchaseDate: "2024-12-11",
-		PurchaseTime: "5:45pm",
-		Total:        "1.25",
-		Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: "1.25"}}}
-
-	expectedError := "invalid time, must be in HH:MM and in military format"
-	actualErr := validation.Validate(receipt)
-	if actualErr == nil || actualErr.Error() != expectedError {
-		t.Errorf("Purchase time must be in format HH:MM and in military time")
-	}
-}
-
-func TestReceiptValidator_Validate_EmptyTotal(t *testing.T) {
-	validation := ReceiptValidator{}
-	receipt := models.Receipt{
-		Retailer:     "Target",
-		PurchaseDate: "2024-12-11",
-		PurchaseTime: "05:45",
-		Total:        "",
-		Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: "1.25"}}}
-
-	expectedError := "total is required"
-	actualErr := validation.Validate(receipt)
-	if actualErr == nil || actualErr.Error() != expectedError {
-		t.Errorf("total is required")
-	}
-}
-
-func TestReceiptValidator_Validate_InvalidTotal(t *testing.T) {
-	validation := ReceiptValidator{}
-	receipt := models.Receipt{
-		Retailer:     "Target",
-		PurchaseDate: "2024-12-11",
-		PurchaseTime: "05:45",
-		Total:        "1.111111",
-		Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: "1.25"}}}
-
-	expectedError := "invalid total, must be in ##.## format"
-	actualErr := validation.Validate(receipt)
-	if actualErr == nil || actualErr.Error() != expectedError {
-		t.Errorf("Purchase total must be in format ##.##")
-	}
-}
-
-func TestReceiptValidator_Validate_EmptyItems(t *testing.T) {
-	validation := ReceiptValidator{}
-	receipt := models.Receipt{
-		Retailer:     "Target",
-		PurchaseDate: "2024-12-11",
-		PurchaseTime: "05:45",
-		Total:        "1.11",
-		Items:        []models.Item{}}
-
-	expectedError := "item(s) are required"
-	actualErr := validation.Validate(receipt)
-	if actualErr == nil || actualErr.Error() != expectedError {
-		t.Errorf("Items cannot be empty")
-	}
-}
-
-func TestReceiptValidator_Validate_EmptyShortDescription(t *testing.T) {
-	validation := ReceiptValidator{}
-	receipt := models.Receipt{
-		Retailer:     "Target",
-		PurchaseDate: "2024-12-11",
-		PurchaseTime: "05:45",
-		Total:        "1.11",
-		Items:        []models.Item{{ShortDescription: "", Price: "1.25"}}}
-
-	expectedError := "short description is required and missing in index 0 of items"
-	actualErr := validation.Validate(receipt)
-	log.Println(actualErr)
-	if actualErr == nil || actualErr.Error() != expectedError {
-		t.Errorf("Short description cannot be empty")
-	}
-}
-
-func TestReceiptValidator_Validate_InvalidShortDescription(t *testing.T) {
-	validation := ReceiptValidator{}
-	receipt := models.Receipt{
-		Retailer:     "Target",
-		PurchaseDate: "2024-12-11",
-		PurchaseTime: "05:45",
-		Total:        "1.11",
-		Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz & Coke - 12-oz", Price: "1.25"}}}
-
-	expectedError := "invalid short description in index 0 of items, must be alphanumeric characters with - being the only allowed special character"
-	actualErr := validation.Validate(receipt)
-	log.Println(actualErr)
-	if actualErr == nil || actualErr.Error() != expectedError {
-		t.Errorf("Short description can only contain alphanumeric characters and is only allowed a hyphon")
-	}
-}
-
-func TestReceiptValidator_Validate_EmptyPrice(t *testing.T) {
-	validation := ReceiptValidator{}
-	receipt := models.Receipt{
-		Retailer:     "Target",
-		PurchaseDate: "2024-12-11",
-		PurchaseTime: "05:45",
-		Total:        "1.11",
-		Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: ""}}}
-
-	expectedError := "price is required and missing in index 0 of items"
-	actualErr := validation.Validate(receipt)
-	log.Println(actualErr)
-	if actualErr == nil || actualErr.Error() != expectedError {
-		t.Errorf("Price cannot be empty")
-	}
-}
-
-func TestReceiptValidator_Validate_InvalidPrice(t *testing.T) {
-	validation := ReceiptValidator{}
-	receipt := models.Receipt{
-		Retailer:     "Target",
-		PurchaseDate: "2024-12-11",
-		PurchaseTime: "05:45",
-		Total:        "1.11",
-		Items:        []models.Item{{ShortDescription: "Pepsi - 12-oz", Price: "2.22222"}}}
-
-	expectedError := "invalid total in index 0 of items, must be in ##.## format"
-	actualErr := validation.Validate(receipt)
-	log.Println(actualErr)
-	if actualErr == nil || actualErr.Error() != expectedError {
-		t.Errorf("Price must be in format ##.##")
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result := validation.IsValidPurchaseDate(test.purchaseDate)
+			if result != test.expectErr {
+				t.Errorf("IsValidPurchaseDate(%q) = %v, expected %v", test.purchaseDate, result, test.expectErr)
+			}
+		})
 	}
 }

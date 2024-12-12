@@ -18,62 +18,61 @@ type ReceiptHandler struct {
 	Validator      validation.ReceiptValidator
 }
 
-func NewReceiptHandler(receiptService *services.ReceiptService) *ReceiptHandler {
-	return &ReceiptHandler{ReceiptService: receiptService}
+func NewReceiptHandler(receiptService *services.ReceiptService, validator validation.ReceiptValidator) *ReceiptHandler {
+	return &ReceiptHandler{
+		ReceiptService: receiptService,
+		Validator:      validator,
+	}
 }
 
 func (h *ReceiptHandler) ProcessReceipt(w http.ResponseWriter, r *http.Request) {
 	var receipt models.Receipt
 	if err := json.NewDecoder(r.Body).Decode(&receipt); err != nil {
-		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
+		log.Printf("Failed to decode receipt JSON: %v", err)
+		http.Error(w, "Invalid input. Please check the JSON format.", http.StatusBadRequest)
 		return
 	}
 
-	if err := h.Validator.Validate(receipt); err != nil {
+	if err := h.Validator.ValidateReceipt(receipt); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	log.Println("Processing reciept")
+	log.Println("Processing receipt")
 	receiptID, err := h.ReceiptService.ProcessReceipt(receipt)
 
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		log.Println("Something went wrong with processing receipt")
+		log.Printf("Error processing receipt: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	log.Println("Receipt succesfully processed")
-
-	response := map[string]string{
-		"id": strconv.Itoa(receiptID),
-	}
-
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(response)
+	log.Printf("Receipt ID: %s successfully processed", receiptID)
+	jsonResponse(w, http.StatusCreated, map[string]string{"id": receiptID})
 }
 
 func (h *ReceiptHandler) GetPointsForReceipt(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	receiptID := vars["id"]
-	convertedReceiptId, err := strconv.Atoi(receiptID)
 
-	if err != nil || convertedReceiptId < 0 {
-		http.Error(w, "Invalid receipt ID", http.StatusBadRequest)
+	if err := h.Validator.ValidateReceiptID(receiptID); err != nil {
+		log.Printf("Received invalid receipt id: %s", receiptID)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	pointsForReceipt, err := h.ReceiptService.CalculateTotalPointsForReceipt(convertedReceiptId)
+	pointsForReceipt, err := h.ReceiptService.CalculateTotalPointsForReceipt(receiptID)
 
 	if err != nil {
-		log.Println("Receipt not found")
-		http.Error(w, err.Error(), http.StatusNotFound)
+		log.Printf("Receipt ID %s not found: %v", receiptID, err)
+		http.Error(w, "Receipt not found", http.StatusNotFound)
 		return
 	}
 
-	response := map[string]string{
-		"points": strconv.Itoa(pointsForReceipt),
-	}
+	jsonResponse(w, http.StatusOK, map[string]string{"points": strconv.Itoa(pointsForReceipt)})
+}
 
+func jsonResponse(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(data)
 }

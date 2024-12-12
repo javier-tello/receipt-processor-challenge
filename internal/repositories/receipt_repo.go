@@ -4,43 +4,62 @@ import (
 	"sync"
 
 	"github.com/javier-tello/receipt-processor-challenge/internal/models"
+
+	"github.com/google/uuid"
 )
+
+// UUIDGenerator is an interface for generating UUIDs
+type UUIDGenerator interface {
+	New() uuid.UUID
+}
+
+// DefaultUUIDGenerator uses the google/uuid package to generate UUIDs
+type DefaultUUIDGenerator struct{}
+
+func (g DefaultUUIDGenerator) New() uuid.UUID {
+	return uuid.New()
+}
 
 // Repository
 type ReceiptRepository interface {
-	ProcessReceipt(receipt models.Receipt) int
-	FindByID(id int) (models.Receipt, bool)
+	ProcessReceipt(receipt models.Receipt) string
+	FindByID(id string) (models.Receipt, bool)
 }
 
-// In memeory implemetaion for this challenge
+// In-memory implementation for this challenge
 type InMemoryReceiptRepo struct {
-	receipts  map[int]models.Receipt
-	idCounter int
-	mu        sync.Mutex
+	receipts    map[string]models.Receipt
+	idGenerator UUIDGenerator
+	mu          sync.RWMutex
 }
 
-func NewInMemoryReceiptRepo() *InMemoryReceiptRepo {
+func NewInMemoryReceiptRepo(generator UUIDGenerator) *InMemoryReceiptRepo {
+	if generator == nil {
+		generator = DefaultUUIDGenerator{}
+	}
 	return &InMemoryReceiptRepo{
-		receipts:  make(map[int]models.Receipt),
-		idCounter: 0,
+		receipts:    make(map[string]models.Receipt),
+		idGenerator: generator,
 	}
 }
 
-func (repo *InMemoryReceiptRepo) FindByID(id int) (models.Receipt, bool) {
-	repo.mu.Lock()
-	defer repo.mu.Unlock()
+// FindByID retrieves a receipt by its ID. Returns the receipt and a boolean indicating if it exists.
+func (repo *InMemoryReceiptRepo) FindByID(receiptID string) (models.Receipt, bool) {
+	repo.mu.RLock()
+	defer repo.mu.RUnlock()
 
-	receipt, exists := repo.receipts[id]
-	return receipt, exists
+	receipt, ok := repo.receipts[receiptID]
+
+	return receipt, ok
 }
 
-func (repo *InMemoryReceiptRepo) ProcessReceipt(receipt models.Receipt) int {
+// ProcessReceipt saves a receipt in memory and returns its generated ID.
+func (repo *InMemoryReceiptRepo) ProcessReceipt(receipt models.Receipt) string {
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
 
-	receipt.ID = repo.idCounter
-	repo.idCounter++
+	receiptID := repo.idGenerator.New().String()
 
-	repo.receipts[receipt.ID] = receipt
-	return receipt.ID
+	repo.receipts[receiptID] = receipt
+	return receiptID
 }
